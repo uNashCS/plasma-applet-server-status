@@ -127,46 +127,82 @@ PlasmoidItem {
 			id: serversListView
 			anchors.fill: parent
 			model: serversModel
-			delegate: Row {
-				height: nameText.paintedHeight * 1.5
+			delegate: Item {
+				id: serverRow
 
-				Kirigami.Icon {
-					id: icon
+				width: ListView.view.width
+				height: nameText.implicitHeight * 1.6
 
-					width: parent.height
-					height: parent.height
-					source: model.status == 1 ? Plasmoid.configuration.iconOnline : Plasmoid.configuration.iconOffline
-					opacity: model.refreshing ? 0.2 : 1.0
+				QQC2.ToolTip.visible: mouseArea.containsMouse
+				QQC2.ToolTip.delay: 500
+				QQC2.ToolTip.text: {
+					var lines = [];
+					lines.push(model.name.length == 0 ? model.hostname : model.name);
+					lines.push(i18n("Host: %1", model.hostname));
+					lines.push(i18n("Method: %1", methodLabel(model.method)));
+					lines.push(i18n("Last check: %1", formatAge(model.lastRefreshAt)));
+
+					if(model.detail && model.detail.length > 0) {
+						lines.push(i18n("Result: %1", model.detail));
+					}
+
+					if(hasDiagnostic(model.hostname)) {
+						lines.push(i18n("Diagnostic available"));
+					}
+
+					lines.push(i18n("Left click: refresh · Right click: options"));
+					return lines.join("\n");
 				}
 
-				PlasmaComponents.BusyIndicator {
-					width: parent.height
-					height: parent.height
-					anchors.horizontalCenter: icon.horizontalCenter
-					running: model.refreshing
-					visible: model.refreshing
-				}
-// 				PlasmaComponents.Label {
-// 					id: timeText
-//
-// 					anchors.left: icon.right
-// 					anchors.leftMargin: 10
-//
-// 					text: time
-// 					height: parent.height
-// 					verticalAlignment: Text.AlignVCenter
-// 					font.pointSize: 12
-// 				}
-				PlasmaComponents.Label {
-					id: nameText
+				RowLayout {
+					anchors.fill: parent
+					anchors.leftMargin: Kirigami.Units.smallSpacing
+					anchors.rightMargin: Kirigami.Units.smallSpacing
+					spacing: Kirigami.Units.smallSpacing
 
-					anchors.left: icon.right
-					anchors.leftMargin: 10
+					Item {
+						id: iconContainer
 
-					height: parent.height
-					text: model.name.length == 0 ? model.hostname : model.name
-					verticalAlignment: Text.AlignVCenter
-					font.pointSize: Plasmoid.configuration.fontSize
+						Layout.preferredWidth: nameText.implicitHeight * 1.2
+						Layout.preferredHeight: nameText.implicitHeight * 1.2
+						Layout.alignment: Qt.AlignVCenter
+
+						Kirigami.Icon {
+							id: icon
+
+							anchors.fill: parent
+							source: model.status == 1 ? Plasmoid.configuration.iconOnline : Plasmoid.configuration.iconOffline
+							opacity: model.refreshing ? 0.2 : 1.0
+						}
+
+						PlasmaComponents.BusyIndicator {
+							anchors.centerIn: parent
+							width: parent.width
+							height: parent.height
+							running: model.refreshing
+							visible: model.refreshing
+						}
+					}
+
+					PlasmaComponents.Label {
+						id: nameText
+
+						Layout.fillWidth: true
+						text: model.name.length == 0 ? model.hostname : model.name
+						elide: Text.ElideRight
+						verticalAlignment: Text.AlignVCenter
+						font.pointSize: Plasmoid.configuration.fontSize
+					}
+
+					PlasmaComponents.Label {
+						id: detailText
+
+						Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+						text: model.detail || ""
+						visible: text.length > 0
+						color: levelColor(model.detailLevel)
+						font.pointSize: Math.max(1, Plasmoid.configuration.fontSize - 2)
+					}
 				}
 
 				QQC2.Menu {
@@ -195,10 +231,7 @@ PlasmoidItem {
 				MouseArea {
 					id: mouseArea
 
-					anchors.top: icon.top
-					anchors.right: nameText.right
-					anchors.bottom: icon.bottom
-					anchors.left: icon.left
+					anchors.fill: parent
 					hoverEnabled: true
 					acceptedButtons: Qt.LeftButton | Qt.RightButton
 					onClicked: function(mouse) {
@@ -295,6 +328,8 @@ PlasmoidItem {
 					servers[i].refreshing = false;
 					servers[i].lastRefreshAt = 0;
 					servers[i].status = 0;
+					servers[i].detail = "";
+					servers[i].detailLevel = 0;
 
 					serversModel.append(servers[i]);
 				}
@@ -313,11 +348,11 @@ PlasmoidItem {
 
 		switch(serversModel.get(index).method) {
 			case 1: // PINGV6
-				command = 'ping6 -c 1 ' + serversModel.get(index).hostname;
+				command = 'ping6 -c 1 -W 2 -w 4 ' + serversModel.get(index).hostname;
 				break;
 
 			case 2: // HTTP 200 OK
-				command = 'curl -sL -w "%{http_code}" "' + serversModel.get(index).hostname + '" -o /dev/null';
+				command = 'curl -sL --connect-timeout 4 --max-time 8 -w "%{http_code}" "' + serversModel.get(index).hostname + '" -o /dev/null';
 				break;
 
 			case 3: // COMMAND
@@ -326,7 +361,7 @@ PlasmoidItem {
 
 			case 0: // PING
 			default:
-				command = 'ping -c 3 ' + serversModel.get(index).hostname;
+				command = 'ping -c 3 -W 2 -w 8 ' + serversModel.get(index).hostname;
 				break;
 		}
 
@@ -334,9 +369,10 @@ PlasmoidItem {
 	}
 
 	function parseResponse(index, exitCode, stdout) {
+		var method = serversModel.get(index).method;
 		var status = 0;
 
-		switch(serversModel.get(index).method) {
+		switch(method) {
 			case 1: // PINGV6
 				status = exitCode == 0 ? 1 : 0;
 				break;
@@ -355,6 +391,8 @@ PlasmoidItem {
 				break;
 		}
 
+		var detailInfo = computeDetail(method, status, stdout);
+
 		var server = serversModel.get(index);
 		var wasKnown = server.known === true;
 		var statusChanged = wasKnown && server.status != status;
@@ -364,6 +402,8 @@ PlasmoidItem {
 		serversModel.setProperty(index, "known", true);
 		serversModel.setProperty(index, "refreshing", false);
 		serversModel.setProperty(index, "lastRefreshAt", new Date().getTime() / 1000);
+		serversModel.setProperty(index, "detail", detailInfo.text);
+		serversModel.setProperty(index, "detailLevel", detailInfo.level);
 
 		updateStatusSummary();
 
@@ -382,6 +422,76 @@ PlasmoidItem {
 				console.log("Automatic diagnostic failed to start:", e);
 			}
 		}
+	}
+
+	function computeDetail(method, status, stdout) {
+		var text = "";
+		var level = 0;
+
+		if(method === 2) {
+			var codeMatch = String(stdout || "").trim().match(/(\d{3})/);
+			var code = codeMatch ? parseInt(codeMatch[1], 10) : -1;
+
+			if(code >= 0) {
+				text = String(code);
+				level = code === 200 ? 1 : (code >= 200 && code < 400 ? 2 : 3);
+			} else {
+				text = i18n("Fail");
+				level = 3;
+			}
+		} else if(method === 0 || method === 1) {
+			var match = String(stdout || "").match(/=\s*([\d.,]+)\/([\d.,]+)\/([\d.,]+)\/([\d.,]+)\s*ms/);
+
+			if(match) {
+				var avg = parseFloat(match[2].replace(",", "."));
+				text = avg.toFixed(1) + " ms";
+				level = avg < 150 ? 1 : (avg < 400 ? 2 : 3);
+			} else {
+				text = status === 1 ? "OK" : i18n("Fail");
+				level = status === 1 ? 1 : 3;
+			}
+		} else {
+			text = status === 1 ? "OK" : i18n("Fail");
+			level = status === 1 ? 1 : 3;
+		}
+
+		return { text: text, level: level };
+	}
+
+	function levelColor(level) {
+		switch(Number(level)) {
+			case 1: return Kirigami.Theme.positiveTextColor;
+			case 3: return Kirigami.Theme.negativeTextColor;
+			case 2: return Kirigami.Theme.neutralTextColor;
+			default: return Kirigami.Theme.disabledTextColor;
+		}
+	}
+
+	function methodLabel(method) {
+		switch(Number(method)) {
+			case 1: return i18n("Ping (IPv6)");
+			case 2: return i18n("HTTP");
+			case 3: return i18n("Command");
+			default: return i18n("Ping");
+		}
+	}
+
+	function formatAge(timestamp) {
+		if(!timestamp || timestamp <= 0) {
+			return i18n("never");
+		}
+
+		var seconds = Math.max(0, Math.round(new Date().getTime() / 1000 - timestamp));
+
+		if(seconds < 60) {
+			return i18n("%1 seconds ago", seconds);
+		}
+
+		if(seconds < 3600) {
+			return i18n("%1 minutes ago", Math.floor(seconds / 60));
+		}
+
+		return i18n("%1 hours ago", Math.floor(seconds / 3600));
 	}
 
 	function updateStatusSummary() {

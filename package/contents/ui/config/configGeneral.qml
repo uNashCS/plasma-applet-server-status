@@ -306,7 +306,16 @@ KCM.SimpleKCM {
 		var serversArray = [];
 
 		for(var i = 0; i < serversModel.count; i++) {
-			serversArray.push(serversModel.get(i));
+			var server = serversModel.get(i);
+
+			serversArray.push({
+				name: server.name || "",
+				hostname: server.hostname || "",
+				refreshRate: server.refreshRate,
+				method: server.method,
+				active: server.active,
+				extraOptions: server.extraOptions || { command: "" }
+			});
 		}
 
 		return serversArray;

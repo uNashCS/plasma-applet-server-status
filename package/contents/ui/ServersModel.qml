@@ -13,5 +13,7 @@ ListModel {
 		lastRefreshAt: 0
 		status: 1
 		known: false
+		detail: ""
+		detailLevel: 0
 	}
 }

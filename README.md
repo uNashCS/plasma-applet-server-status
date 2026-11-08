@@ -33,6 +33,9 @@ install -Dm644 package/contents/notifications/org.kde.plasma.serverstatus.deskto
 - 4 server checking methods: ping, ping for IPv6 addresses, HTTP 200 OK response, custom command
 - Automatic update of server status
 - Manual refresh by clicking on the server name
+- Per-server detail: ping latency, HTTP status code, or OK/fail for commands
+- Hover tooltip with host, method, last check, and result
+- Check timeouts so unreachable servers are detected quickly
 - Native KDE notifications with per-event sounds and a refresh action
 - Network path diagnostics with `mtr` and a `tracepath` fallback
 
