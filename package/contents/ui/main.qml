@@ -30,6 +30,7 @@ PlasmoidItem {
 	}
 
 	Component.onCompleted: {
+		migrateNotificationConfig();
 		reloadServerModel();
 	}
 
@@ -264,11 +265,15 @@ PlasmoidItem {
 				break;
 		}
 
-		if(serversModel.get(index).status != status) {
+		var server = serversModel.get(index);
+		var wasKnown = server.known === true;
+
+		if(wasKnown && server.status != status) {
 			notify(index, status);
 		}
 
 		serversModel.setProperty(index, "status", status);
+		serversModel.setProperty(index, "known", true);
 		serversModel.setProperty(index, "refreshing", false);
 		serversModel.setProperty(index, "lastRefreshAt", new Date().getTime() / 1000);
 
@@ -289,41 +294,82 @@ PlasmoidItem {
 	}
 
 	function notify(serverIndex, status) {
+		if(serverIndex < 0 || serverIndex >= serversModel.count) {
+			return;
+		}
+
+		var server = serversModel.get(serverIndex);
+		var action = status === 0 ? Plasmoid.configuration.notificationDownAction : Plasmoid.configuration.notificationUpAction;
+		var commandTemplate = status === 0 ? Plasmoid.configuration.notificationDownCommand : Plasmoid.configuration.notificationUpCommand;
+
+		switch(Number(action)) {
+			case 1: // System notification
+				sendSystemNotification(server, status);
+				break;
+
+			case 2: // Command
+				if(commandTemplate && commandTemplate.length > 0) {
+					notifyExecDS.exec(expandCommand(commandTemplate, server));
+				}
+				break;
+
+			case 0: // Nothing
+			default:
+				break;
+		}
+	}
+
+	function sendSystemNotification(server, status) {
+		var offline = status === 0;
+		var serverName = server.name && server.name.length > 0 ? server.name : server.hostname;
+		var title = offline ? i18n("Server offline") : i18n("Server online");
+		var text = offline
+			? i18n("%1 (%2) is not responding.", serverName, server.hostname)
+			: i18n("%1 (%2) is responding again.", serverName, server.hostname);
+		var command = "notify-send --app-name=" + shellQuote("Server Status")
+			+ " --urgency=" + (offline ? "critical" : "normal")
+			+ " --icon=" + shellQuote(offline ? "dialog-error" : "dialog-information")
+			+ " " + shellQuote(title)
+			+ " " + shellQuote(text);
+
+		notifyExecDS.exec(command);
+	}
+
+	function shellQuote(value) {
+		return "'" + String(value).replace(/'/g, "'\\''") + "'";
+	}
+
+	function expandCommand(template, server) {
+		return String(template || "")
+			.replace(/%hostname%/g, server.hostname)
+			.replace(/%name%/g, server.name || server.hostname);
+	}
+
+	function migrateNotificationConfig() {
+		var config = Plasmoid.configuration;
+
+		if(config.notificationConfigMigrated) {
+			return;
+		}
+
 		try {
-			var notification = status === 0 ? Plasmoid.configuration.notificationDown : Plasmoid.configuration.notificationUp;
-			notification = JSON.parse(notification || '{"action": 0, "extraOptions": {"command": ""}}');
+			var legacyUp = JSON.parse(config.notificationUp || '{}');
+			var legacyDown = JSON.parse(config.notificationDown || '{}');
 
-			switch(notification.action) {
-				case 1: // Play sound
-					break;
+			if(legacyUp && typeof legacyUp.action === "number") {
+				config.notificationUpAction = legacyUp.action;
+				config.notificationUpCommand = (legacyUp.extraOptions && legacyUp.extraOptions.command) || "";
+			}
 
-				case 2: // System notification
-					var title = serversModel.get(serverIndex).name;
-					var text = status === 0 ?
-						'Server ' + serversModel.get(serverIndex).name + ' is offline.' :
-						'Server ' + serversModel.get(serverIndex).name + ' is online';
-
-					var command = 'notify-send "' + title.replace(/"/, '\"') + '" "' + text.replace(/"/, '\"') + '"';
-
-					notifyExecDS.exec(command);
-					break;
-
-				case 3: // Command
-					if (notification.extraOptions && notification.extraOptions.command) {
-						var command = notification.extraOptions.command
-							.replace(/\%hostname\%/g, serversModel.get(serverIndex).hostname)
-							.replace(/\%name\%/g, serversModel.get(serverIndex).name);
-
-						notifyExecDS.exec(command);
-					}
-					break;
-
-				case 0: // Nothing
-					break;
+			if(legacyDown && typeof legacyDown.action === "number") {
+				config.notificationDownAction = legacyDown.action;
+				config.notificationDownCommand = (legacyDown.extraOptions && legacyDown.extraOptions.command) || "";
 			}
 		} catch (e) {
-			console.log("Error in notify function:", e);
+			console.log("Error migrating legacy notification configuration:", e);
 		}
+
+		config.notificationConfigMigrated = true;
 	}
 
 	function action_refreshAll() {

@@ -25,12 +25,32 @@
     </entry>
   </group>
   <group name="Notifications">
+    <entry name="notificationUpAction" type="Int">
+      <label>Action when a server goes online</label>
+      <default>0</default>
+    </entry>
+    <entry name="notificationUpCommand" type="String">
+      <label>Command when a server goes online</label>
+      <default></default>
+    </entry>
+    <entry name="notificationDownAction" type="Int">
+      <label>Action when a server goes offline</label>
+      <default>1</default>
+    </entry>
+    <entry name="notificationDownCommand" type="String">
+      <label>Command when a server goes offline</label>
+      <default></default>
+    </entry>
+    <entry name="notificationConfigMigrated" type="Bool">
+      <label>Whether the legacy notification configuration has been migrated</label>
+      <default>false</default>
+    </entry>
     <entry name="notificationUp" type="String">
-      <label>Notification on server online</label>
+      <label>Legacy notification on server online</label>
       <default>{}</default>
     </entry>
     <entry name="notificationDown" type="String">
-      <label>Notification on server offline</label>
+      <label>Legacy notification on server offline</label>
       <default>{}</default>
     </entry>
   </group>

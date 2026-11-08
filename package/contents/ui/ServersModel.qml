@@ -12,5 +12,6 @@ ListModel {
 		refreshing: false
 		lastRefreshAt: 0
 		status: 1
+		known: false
 	}
 }
