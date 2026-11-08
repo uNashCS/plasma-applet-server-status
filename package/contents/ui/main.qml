@@ -10,6 +10,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.kirigami as Kirigami
+import org.kde.notification
 
 PlasmoidItem {
 	id: root
@@ -27,6 +28,26 @@ PlasmoidItem {
 
 	ServersModel {
 		id: serversModel
+	}
+
+	Component {
+		id: serverNotificationComponent
+
+		Notification {
+			componentName: "org.kde.plasma.serverstatus"
+			autoDelete: true
+			flags: Notification.CloseOnTimeout | Notification.SkipGrouping
+			hints: ({
+				"desktop-entry": "org.kde.plasma.serverstatus",
+				"x-kde-appname": "org.kde.plasma.serverstatus"
+			})
+			actions: [
+				NotificationAction {
+					label: i18n("Refresh")
+					onActivated: root.action_refreshAll()
+				}
+			]
+		}
 	}
 
 	Component.onCompleted: {
@@ -322,21 +343,19 @@ PlasmoidItem {
 	function sendSystemNotification(server, status) {
 		var offline = status === 0;
 		var serverName = server.name && server.name.length > 0 ? server.name : server.hostname;
-		var title = offline ? i18n("Server offline") : i18n("Server online");
-		var text = offline
-			? i18n("%1 (%2) is not responding.", serverName, server.hostname)
-			: i18n("%1 (%2) is responding again.", serverName, server.hostname);
-		var command = "notify-send --app-name=" + shellQuote("Server Status")
-			+ " --urgency=" + (offline ? "critical" : "normal")
-			+ " --icon=" + shellQuote(offline ? "dialog-error" : "dialog-information")
-			+ " " + shellQuote(title)
-			+ " " + shellQuote(text);
+		var notification = serverNotificationComponent.createObject(root, {
+			eventId: offline ? "serverOffline" : "serverOnline",
+			title: offline ? i18n("Server offline") : i18n("Server online"),
+			text: offline
+				? i18n("%1 (%2) is not responding.", serverName, server.hostname)
+				: i18n("%1 (%2) is responding again.", serverName, server.hostname),
+			iconName: offline ? "dialog-error" : "dialog-information",
+			urgency: offline ? Notification.CriticalUrgency : Notification.NormalUrgency
+		});
 
-		notifyExecDS.exec(command);
-	}
-
-	function shellQuote(value) {
-		return "'" + String(value).replace(/'/g, "'\\''") + "'";
+		if(notification) {
+			notification.sendEvent();
+		}
 	}
 
 	function expandCommand(template, server) {

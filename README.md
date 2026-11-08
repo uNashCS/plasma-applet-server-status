@@ -10,7 +10,21 @@ Originally written by Maciej Gierej - http://makg.eu
 
 ## Installation
 ```
+./install.sh
+```
+
+The installer updates the applet with `kpackagetool6` and also installs the
+notification configuration needed for native KDE notifications. Use
+`./install.sh --no-restart` to avoid restarting plasmashell automatically.
+
+If you install manually, copy the notification files too:
+
+```
 kpackagetool6 --type Plasma/Applet --install package
+install -Dm644 package/contents/notifications/org.kde.plasma.serverstatus.notifyrc \
+  ~/.local/share/knotifications6/org.kde.plasma.serverstatus.notifyrc
+install -Dm644 package/contents/notifications/org.kde.plasma.serverstatus.desktop \
+  ~/.local/share/applications/org.kde.plasma.serverstatus.desktop
 ```
 
 ## Features
@@ -19,6 +33,18 @@ kpackagetool6 --type Plasma/Applet --install package
 - 4 server checking methods: ping, ping for IPv6 addresses, HTTP 200 OK response, custom command
 - Automatic update of server status
 - Manual refresh by clicking on the server name
+- Native KDE notifications with per-event sounds and a refresh action
+
+## Notifications
+
+Notifications use KNotification, so they follow Plasma's Do Not Disturb mode,
+notification history, and per-application settings. Configure popups and sounds
+in **System Settings → Notifications → Server Status**.
+
+The notification for a server going offline uses a critical urgency and the
+`dialog-error` sound. The notification for a server coming back online uses the
+`dialog-information` sound. The first status check after starting the applet
+does not send a notification.
 
 ## Custom command
 You can define your custom command which will be executed on each server update. The plasmoid interprets exit code 0 as the server being online. Any other exit code will result in offline status. You can use `%hostname%` string in the command definition to pass particular server's hostname as an argument or option.

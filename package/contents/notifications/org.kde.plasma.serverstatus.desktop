@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Server Status
+Comment=Shows status of user defined servers
+Icon=applications-internet
+Exec=/bin/true
+Terminal=false
+NoDisplay=true
+Categories=Utility;
+StartupNotify=false

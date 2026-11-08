@@ -1,0 +1,19 @@
+[Global]
+IconName=applications-internet
+Name=Server Status
+Comment=Shows status of user defined servers
+DesktopEntry=org.kde.plasma.serverstatus.desktop
+
+[Event/serverOffline]
+Name=Server offline
+Comment=A monitored server stopped responding
+Action=Popup|Sound
+Sound=dialog-error
+Urgency=Critical
+
+[Event/serverOnline]
+Name=Server online
+Comment=A monitored server is responding again
+Action=Popup|Sound
+Sound=dialog-information
+Urgency=Normal
