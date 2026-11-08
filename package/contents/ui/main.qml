@@ -21,6 +21,14 @@ PlasmoidItem {
 	property var diagnosticRunning: ({})
 	property var latencyHistory: ({})
 
+	property int hoveredServerIndex: -1
+	readonly property var hoveredServer: (hoveredServerIndex >= 0 && hoveredServerIndex < serversModel.count) ? serversModel.get(hoveredServerIndex) : null
+	readonly property string hoveredHostname: hoveredServer ? String(hoveredServer.hostname || "") : ""
+	readonly property int hoveredMethod: hoveredServer ? Number(hoveredServer.method) : -1
+	readonly property bool hoveredLatencyAvailable: hoveredHostname.length > 0 && hasLatencyData(hoveredHostname)
+	readonly property string hoveredLatencyStats: hoveredLatencyAvailable ? latencyStats(hoveredHostname) : ""
+	readonly property int tooltipLocation: Plasmoid.location === PlasmaCore.Types.RightEdge ? PlasmaCore.Types.RightEdge : PlasmaCore.Types.LeftEdge
+
 	Layout.fillWidth: true
 	Layout.fillHeight: true
 	width: 250
@@ -31,6 +39,52 @@ PlasmoidItem {
 
 	ServersModel {
 		id: serversModel
+	}
+
+	Item {
+		id: sharedTooltipContent
+
+		visible: false
+		implicitWidth: 260
+		implicitHeight: tooltipColumn.implicitHeight
+
+		ColumnLayout {
+			id: tooltipColumn
+
+			width: 260
+			spacing: Kirigami.Units.smallSpacing
+
+			QQC2.Label {
+				Layout.fillWidth: true
+				wrapMode: Text.WordWrap
+				text: root.tooltipTextFor(root.hoveredServerIndex)
+			}
+
+			QQC2.Label {
+				Layout.fillWidth: true
+				visible: root.hoveredLatencyAvailable
+				font.pointSize: Kirigami.Theme.smallFont.pointSize
+				wrapMode: Text.NoWrap
+				elide: Text.ElideRight
+				text: root.hoveredLatencyStats
+			}
+
+			LatencySparkline {
+				Layout.preferredWidth: 260
+				Layout.preferredHeight: 40
+				visible: root.hoveredLatencyAvailable
+				samples: root.hoveredHostname.length > 0 ? (root.latencyHistory[root.hoveredHostname] || []) : []
+				windowSeconds: Math.max(60, Number(Plasmoid.configuration.latencyHistoryMinutes) * 60)
+			}
+
+			QQC2.Label {
+				Layout.fillWidth: true
+				visible: hasLatencyMethod(root.hoveredMethod) && !root.hoveredLatencyAvailable
+				font.pointSize: Kirigami.Theme.smallFont.pointSize
+				color: Kirigami.Theme.disabledTextColor
+				text: i18n("Collecting latency data…")
+			}
+		}
 	}
 
 	Component {
@@ -134,87 +188,6 @@ PlasmoidItem {
 				width: ListView.view.width
 				height: nameText.implicitHeight * 1.6
 
-				property string tooltipText: {
-					var lines = [];
-					lines.push(model.name.length == 0 ? model.hostname : model.name);
-					lines.push(i18n("Host: %1", model.hostname));
-					lines.push(i18n("Method: %1", methodLabel(model.method)));
-					lines.push(i18n("Last check: %1", formatAge(model.lastRefreshAt)));
-
-					if(model.detail && model.detail.length > 0) {
-						lines.push(i18n("Result: %1", model.detail));
-					}
-
-					if(hasDiagnostic(model.hostname)) {
-						lines.push(i18n("Diagnostic available"));
-					}
-
-					lines.push(i18n("Left click: refresh · Right click: options"));
-					return lines.join("\n");
-				}
-
-				QQC2.ToolTip {
-					id: rowToolTip
-
-					parent: serverRow
-
-					property bool cursorInside: false
-
-					visible: mouseArea.containsMouse || rowToolTip.cursorInside
-					delay: 400
-					closePolicy: QQC2.Popup.CloseOnEscape
-					x: Math.round((serverRow.width - width) / 2)
-					y: {
-						var rowY = serverRow.mapToItem(serversListView, 0, 0).y;
-
-						if(rowY >= height + Kirigami.Units.smallSpacing * 2) {
-							return -height - Kirigami.Units.smallSpacing;
-						}
-
-						return serverRow.height + Kirigami.Units.smallSpacing;
-					}
-
-					contentItem: ColumnLayout {
-						spacing: Kirigami.Units.smallSpacing
-						width: 240
-
-						HoverHandler {
-							onHoveredChanged: rowToolTip.cursorInside = hovered
-						}
-
-						QQC2.Label {
-							Layout.fillWidth: true
-							wrapMode: Text.WordWrap
-							text: serverRow.tooltipText
-						}
-
-						QQC2.Label {
-							Layout.fillWidth: true
-							visible: hasLatencyData(model.hostname)
-							font.pointSize: Kirigami.Theme.smallFont.pointSize
-							wrapMode: Text.NoWrap
-							elide: Text.ElideRight
-							text: latencyStats(model.hostname)
-						}
-
-						LatencySparkline {
-							Layout.preferredWidth: 240
-							Layout.preferredHeight: 40
-							visible: hasLatencyData(model.hostname)
-							samples: root.latencyHistory[model.hostname] || []
-							windowSeconds: Math.max(60, Number(Plasmoid.configuration.latencyHistoryMinutes) * 60)
-						}
-
-						QQC2.Label {
-							Layout.fillWidth: true
-							visible: hasLatencyMethod(model.method) && !hasLatencyData(model.hostname)
-							font.pointSize: Kirigami.Theme.smallFont.pointSize
-							color: Kirigami.Theme.disabledTextColor
-							text: i18n("Collecting latency data…")
-						}
-					}
-				}
-
 				RowLayout {
 					anchors.fill: parent
 					anchors.leftMargin: Kirigami.Units.smallSpacing
@@ -300,6 +273,21 @@ PlasmoidItem {
 							serverMenu.popup();
 						} else {
 							refreshServer(model.index);
+						}
+					}
+				}
+
+				PlasmaCore.ToolTipArea {
+					anchors.fill: parent
+					active: true
+					interactive: true
+					timeout: -1
+					location: root.tooltipLocation
+					mainItem: sharedTooltipContent
+
+					onContainsMouseChanged: {
+						if(containsMouse) {
+							root.hoveredServerIndex = index;
 						}
 					}
 				}
@@ -658,6 +646,31 @@ PlasmoidItem {
 		}
 
 		return i18n("%1 hours ago", Math.floor(seconds / 3600));
+	}
+
+	function tooltipTextFor(index) {
+		if(index < 0 || index >= serversModel.count) {
+			return "";
+		}
+
+		var server = serversModel.get(index);
+		var lines = [];
+
+		lines.push(server.name.length == 0 ? server.hostname : server.name);
+		lines.push(i18n("Host: %1", server.hostname));
+		lines.push(i18n("Method: %1", methodLabel(server.method)));
+		lines.push(i18n("Last check: %1", formatAge(server.lastRefreshAt)));
+
+		if(server.detail && server.detail.length > 0) {
+			lines.push(i18n("Result: %1", server.detail));
+		}
+
+		if(hasDiagnostic(server.hostname)) {
+			lines.push(i18n("Diagnostic available"));
+		}
+
+		lines.push(i18n("Left click: refresh · Right click: options"));
+		return lines.join("\n");
 	}
 
 	function updateStatusSummary() {
