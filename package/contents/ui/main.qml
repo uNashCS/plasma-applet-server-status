@@ -17,6 +17,8 @@ PlasmoidItem {
 
 	property int lastRefreshAt: 0
 	property int statusSummary: 1
+	property var diagnosticReports: ({})
+	property var diagnosticRunning: ({})
 
 	Layout.fillWidth: true
 	Layout.fillHeight: true
@@ -34,6 +36,11 @@ PlasmoidItem {
 		id: serverNotificationComponent
 
 		Notification {
+			id: serverNotification
+
+			property string serverName: ""
+			property string serverHostname: ""
+
 			componentName: "org.kde.plasma.serverstatus"
 			autoDelete: true
 			flags: Notification.CloseOnTimeout | Notification.SkipGrouping
@@ -45,8 +52,32 @@ PlasmoidItem {
 				NotificationAction {
 					label: i18n("Refresh")
 					onActivated: root.action_refreshAll()
+				},
+				NotificationAction {
+					label: i18n("Diagnose")
+					onActivated: root.showDiagnostic({
+						name: serverNotification.serverName,
+						hostname: serverNotification.serverHostname
+					})
 				}
 			]
+		}
+	}
+
+	DiagnosticDialog {
+		id: diagnosticDialog
+	}
+
+	Component {
+		id: automaticDiagnosticComponent
+
+		DiagnosticRunner {
+			id: automaticRunner
+
+			onFinished: root.finishDiagnostic(reportKey, automaticRunner)
+			onFailed: function(message) {
+				root.failDiagnostic(reportKey, message, automaticRunner);
+			}
 		}
 	}
 
@@ -138,6 +169,29 @@ PlasmoidItem {
 					font.pointSize: Plasmoid.configuration.fontSize
 				}
 
+				QQC2.Menu {
+					id: serverMenu
+
+					QQC2.MenuItem {
+						text: i18n("Refresh")
+						icon.name: "view-refresh"
+						onTriggered: refreshServer(model.index)
+					}
+
+					QQC2.MenuItem {
+						text: i18n("Diagnose route...")
+						icon.name: "network-connect"
+						onTriggered: showDiagnostic(model)
+					}
+
+					QQC2.MenuItem {
+						text: i18n("View last diagnostic")
+						icon.name: "document-open"
+						enabled: hasDiagnostic(model.hostname)
+						onTriggered: showLastDiagnostic(model)
+					}
+				}
+
 				MouseArea {
 					id: mouseArea
 
@@ -146,8 +200,13 @@ PlasmoidItem {
 					anchors.bottom: icon.bottom
 					anchors.left: icon.left
 					hoverEnabled: true
-					onClicked: {
-						refreshServer(model.index)
+					acceptedButtons: Qt.LeftButton | Qt.RightButton
+					onClicked: function(mouse) {
+						if(mouse.button === Qt.RightButton) {
+							serverMenu.popup();
+						} else {
+							refreshServer(model.index);
+						}
 					}
 				}
 			}
@@ -185,10 +244,20 @@ PlasmoidItem {
 		property variant cmdMap: ({})
 
 		onNewData: {
-				parseResponse(cmdMap[sourceName], data["exit code"], data.stdout)
+			var index = cmdMap[sourceName];
 
-				exited(sourceName, data.stdout)
-				disconnectSource(sourceName)
+			try {
+				parseResponse(index, data["exit code"], data.stdout);
+			} catch(e) {
+				console.log("Error processing server response:", e);
+
+				if(index !== undefined) {
+					serversModel.setProperty(index, "refreshing", false);
+				}
+			}
+
+			exited(sourceName, data.stdout);
+			disconnectSource(sourceName);
 		}
 
 		function exec(cmd, serverIndex) {
@@ -288,10 +357,8 @@ PlasmoidItem {
 
 		var server = serversModel.get(index);
 		var wasKnown = server.known === true;
-
-		if(wasKnown && server.status != status) {
-			notify(index, status);
-		}
+		var statusChanged = wasKnown && server.status != status;
+		var shouldDiagnose = statusChanged && status === 0;
 
 		serversModel.setProperty(index, "status", status);
 		serversModel.setProperty(index, "known", true);
@@ -299,6 +366,22 @@ PlasmoidItem {
 		serversModel.setProperty(index, "lastRefreshAt", new Date().getTime() / 1000);
 
 		updateStatusSummary();
+
+		if(statusChanged) {
+			try {
+				notify(index, status);
+			} catch(e) {
+				console.log("Notification failed:", e);
+			}
+		}
+
+		if(shouldDiagnose) {
+			try {
+				startAutomaticDiagnostic(server);
+			} catch(e) {
+				console.log("Automatic diagnostic failed to start:", e);
+			}
+		}
 	}
 
 	function updateStatusSummary() {
@@ -312,6 +395,118 @@ PlasmoidItem {
 		}
 
 		statusSummary = status;
+	}
+
+	function showDiagnostic(server) {
+		if(!server || !server.hostname) {
+			return;
+		}
+
+		diagnosticDialog.showFor(server.name, server.hostname);
+	}
+
+	function hasDiagnostic(hostname) {
+		var key = String(hostname || "");
+		return key.length > 0 && diagnosticReports[key] !== undefined;
+	}
+
+	function showLastDiagnostic(server) {
+		if(!server) {
+			return;
+		}
+
+		var key = String(server.hostname || "");
+		var report = diagnosticReports[key];
+
+		if(report === undefined) {
+			return;
+		}
+
+		diagnosticDialog.showReport(server.name, server.hostname, report);
+	}
+
+	function startAutomaticDiagnostic(server) {
+		if(!Plasmoid.configuration.diagnosticAutoOffline || !server) {
+			return;
+		}
+
+		var key = String(server.hostname || "");
+
+		if(key.length === 0 || diagnosticRunning[key] === true) {
+			return;
+		}
+
+		setDiagnosticRunning(key, true);
+
+		var runner = automaticDiagnosticComponent.createObject(root, { reportKey: key });
+
+		if(!runner) {
+			setDiagnosticRunning(key, false);
+			return;
+		}
+
+		try {
+			runner.start(server.hostname, server.name, key);
+		} catch(e) {
+			console.log("Automatic diagnostic failed:", e);
+			failDiagnostic(key, String(e), runner);
+		}
+	}
+
+	function finishDiagnostic(key, runner) {
+		setDiagnosticReport(key, {
+			output: runner.output,
+			error: runner.error,
+			note: runner.note,
+			tool: runner.tool,
+			exitCode: runner.exitCode,
+			timestamp: new Date().getTime()
+		});
+		setDiagnosticRunning(key, false);
+		Qt.callLater(function() { runner.destroy(); });
+	}
+
+	function failDiagnostic(key, message, runner) {
+		setDiagnosticReport(key, {
+			output: "",
+			error: message,
+			note: "",
+			tool: runner ? runner.tool : "",
+			exitCode: -1,
+			timestamp: new Date().getTime()
+		});
+		setDiagnosticRunning(key, false);
+
+		if(runner) {
+			Qt.callLater(function() { runner.destroy(); });
+		}
+	}
+
+	function setDiagnosticReport(key, report) {
+		var reports = {};
+
+		for(var existingKey in diagnosticReports) {
+			reports[existingKey] = diagnosticReports[existingKey];
+		}
+
+		reports[String(key)] = report;
+		diagnosticReports = reports;
+	}
+
+	function setDiagnosticRunning(key, value) {
+		var running = {};
+
+		for(var existingKey in diagnosticRunning) {
+			running[existingKey] = diagnosticRunning[existingKey];
+		}
+
+		if(value) {
+			running[String(key)] = true;
+		} else {
+			delete running[String(key)];
+		}
+
+		diagnosticRunning = running;
 	}
 
 	function notify(serverIndex, status) {
@@ -350,7 +545,9 @@ PlasmoidItem {
 				? i18n("%1 (%2) is not responding.", serverName, server.hostname)
 				: i18n("%1 (%2) is responding again.", serverName, server.hostname),
 			iconName: offline ? "dialog-error" : "dialog-information",
-			urgency: offline ? Notification.CriticalUrgency : Notification.NormalUrgency
+			urgency: offline ? Notification.CriticalUrgency : Notification.NormalUrgency,
+			serverName: serverName,
+			serverHostname: server.hostname
 		});
 
 		if(notification) {

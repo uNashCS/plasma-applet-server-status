@@ -34,6 +34,7 @@ install -Dm644 package/contents/notifications/org.kde.plasma.serverstatus.deskto
 - Automatic update of server status
 - Manual refresh by clicking on the server name
 - Native KDE notifications with per-event sounds and a refresh action
+- Network path diagnostics with `mtr` and a `tracepath` fallback
 
 ## Notifications
 
@@ -45,6 +46,19 @@ The notification for a server going offline uses a critical urgency and the
 `dialog-error` sound. The notification for a server coming back online uses the
 `dialog-information` sound. The first status check after starting the applet
 does not send a notification.
+
+## Network diagnostics
+
+Servers can be diagnosed from the add/edit dialog or from the server's context
+menu in the applet. The diagnostic uses `mtr` in report mode when available and
+falls back to `tracepath` if `mtr` is missing or cannot run. Both are optional
+tools; the status checks do not depend on them.
+
+The report shows the route, packet loss, and latency per hop. It can be copied
+from the diagnostic window or run again. When a server transitions from online
+to offline, a diagnostic can also run automatically in the background and its
+last report remains available from the context menu. This behavior can be
+disabled in **Configure → Notifications → Diagnostics**.
 
 ## Custom command
 You can define your custom command which will be executed on each server update. The plasmoid interprets exit code 0 as the server being online. Any other exit code will result in offline status. You can use `%hostname%` string in the command definition to pass particular server's hostname as an argument or option.

@@ -45,6 +45,10 @@
       <label>Whether the legacy notification configuration has been migrated</label>
       <default>false</default>
     </entry>
+    <entry name="diagnosticAutoOffline" type="Bool">
+      <label>Run a network diagnostic when a server goes offline</label>
+      <default>true</default>
+    </entry>
     <entry name="notificationUp" type="String">
       <label>Legacy notification on server online</label>
       <default>{}</default>

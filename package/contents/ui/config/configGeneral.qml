@@ -19,6 +19,10 @@ KCM.SimpleKCM {
 		id: serversModel
 	}
 
+	DiagnosticDialog {
+		id: diagnosticDialog
+	}
+
 	Component.onCompleted: {
 		serversModel.clear();
 
@@ -205,6 +209,13 @@ KCM.SimpleKCM {
 				id: serverHostname
 				Kirigami.FormData.label: i18n("Host name:")
 				Layout.fillWidth: true
+			}
+
+			QQC2.Button {
+				text: i18n("Diagnostic route...")
+				icon.name: "network-connect"
+				enabled: serverHostname.text.trim().length > 0
+				onClicked: diagnosticDialog.showFor(serverName.text, serverHostname.text)
 			}
 
 			QQC2.SpinBox {

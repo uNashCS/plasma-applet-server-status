@@ -13,6 +13,7 @@ KCM.SimpleKCM {
 	property alias cfg_notificationUpCommand: notifyUpCommand.text
 	property alias cfg_notificationDownAction: notifyDownAction.currentIndex
 	property alias cfg_notificationDownCommand: notifyDownCommand.text
+	property alias cfg_diagnosticAutoOffline: diagnosticAutoOffline.checked
 
 	Plasma5Support.DataSource {
 		id: settingsDS
@@ -104,6 +105,24 @@ KCM.SimpleKCM {
 			visible: notifyDownAction.currentIndex === 2
 			font.pointSize: Kirigami.Theme.smallFont.pointSize
 			text: i18n("Commands run with /bin/sh -c. Use %hostname% and %name% as placeholders.")
+		}
+
+		QQC2.Label {
+			Kirigami.FormData.isSection: true
+			text: i18n("Diagnostics")
+		}
+
+		QQC2.CheckBox {
+			id: diagnosticAutoOffline
+			text: i18n("Run a network diagnostic when a server goes offline")
+			Layout.fillWidth: true
+		}
+
+		QQC2.Label {
+			Layout.fillWidth: true
+			wrapMode: Text.WordWrap
+			font.pointSize: Kirigami.Theme.smallFont.pointSize
+			text: i18n("Uses mtr when available and falls back to tracepath. The report is available from the server's context menu.")
 		}
 
 		QQC2.Button {
