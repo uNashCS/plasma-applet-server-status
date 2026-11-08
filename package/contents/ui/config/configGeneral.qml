@@ -11,7 +11,8 @@ import ".."
 KCM.SimpleKCM {
 	id: configGeneral
 
-	property string cfg_servers: Plasmoid.configuration.servers
+	property string cfg_servers: "[]"
+	property int cfg_diagnosticCycles: 3
 
 	property int dialogMode: -1
 
@@ -215,7 +216,7 @@ KCM.SimpleKCM {
 				text: i18n("Diagnostic route...")
 				icon.name: "network-connect"
 				enabled: serverHostname.text.trim().length > 0
-				onClicked: diagnosticDialog.showFor(serverName.text, serverHostname.text, Plasmoid.configuration.diagnosticCycles)
+				onClicked: diagnosticDialog.showFor(serverName.text, serverHostname.text, cfg_diagnosticCycles)
 			}
 
 			QQC2.SpinBox {

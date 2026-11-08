@@ -156,23 +156,31 @@ PlasmoidItem {
 				QQC2.ToolTip {
 					id: rowToolTip
 
-					visible: mouseArea.containsMouse
+					parent: serverRow
+
+					property bool cursorInside: false
+
+					visible: mouseArea.containsMouse || rowToolTip.cursorInside
 					delay: 400
 					closePolicy: QQC2.Popup.CloseOnEscape
-					x: Math.round((parent.width - width) / 2)
+					x: Math.round((serverRow.width - width) / 2)
 					y: {
 						var rowY = serverRow.mapToItem(serversListView, 0, 0).y;
 
-						if(rowY < serversListView.height / 2) {
-							return parent.height + Kirigami.Units.smallSpacing;
+						if(rowY >= height + Kirigami.Units.smallSpacing * 2) {
+							return -height - Kirigami.Units.smallSpacing;
 						}
 
-						return -height - Kirigami.Units.smallSpacing;
+						return serverRow.height + Kirigami.Units.smallSpacing;
 					}
 
 					contentItem: ColumnLayout {
 						spacing: Kirigami.Units.smallSpacing
 						width: 240
+
+						HoverHandler {
+							onHoveredChanged: rowToolTip.cursorInside = hovered
+						}
 
 						QQC2.Label {
 							Layout.fillWidth: true
