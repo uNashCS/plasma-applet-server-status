@@ -25,8 +25,12 @@ PlasmoidItem {
 	readonly property var hoveredServer: (hoveredServerIndex >= 0 && hoveredServerIndex < serversModel.count) ? serversModel.get(hoveredServerIndex) : null
 	readonly property string hoveredHostname: hoveredServer ? String(hoveredServer.hostname || "") : ""
 	readonly property int hoveredMethod: hoveredServer ? Number(hoveredServer.method) : -1
-	readonly property bool hoveredLatencyAvailable: hoveredHostname.length > 0 && hasLatencyData(hoveredHostname)
-	readonly property string hoveredLatencyStats: hoveredLatencyAvailable ? latencyStats(hoveredHostname) : ""
+	readonly property int hoveredStatus: hoveredServer ? Number(hoveredServer.status) : 0
+	readonly property int hoveredDetailLevel: hoveredServer ? Number(hoveredServer.detailLevel) : 0
+	readonly property string hoveredDetailText: hoveredServer && hoveredServer.detail ? String(hoveredServer.detail) : ""
+	readonly property var hoveredLatencySummary: latencySummary(hoveredHostname)
+	readonly property bool hoveredLatencyAvailable: hoveredHostname.length > 0 && hoveredLatencySummary.hasData
+	readonly property string hoveredWindowLabel: i18n("%1 min", Number(Plasmoid.configuration.latencyHistoryMinutes) || 60)
 	readonly property int tooltipLocation: Plasmoid.location === PlasmaCore.Types.RightEdge ? PlasmaCore.Types.RightEdge : PlasmaCore.Types.LeftEdge
 
 	Layout.fillWidth: true
@@ -45,33 +49,150 @@ PlasmoidItem {
 		id: sharedTooltipContent
 
 		visible: false
-		implicitWidth: 260
+		implicitWidth: 280
 		implicitHeight: tooltipColumn.implicitHeight
 
 		ColumnLayout {
 			id: tooltipColumn
 
-			width: 260
+			width: 280
 			spacing: Kirigami.Units.smallSpacing
 
-			QQC2.Label {
+			RowLayout {
 				Layout.fillWidth: true
-				wrapMode: Text.WordWrap
-				text: root.tooltipTextFor(root.hoveredServerIndex)
+				spacing: Kirigami.Units.smallSpacing
+
+				Rectangle {
+					Layout.alignment: Qt.AlignVCenter
+					width: Kirigami.Units.smallSpacing * 1.4
+					height: width
+					radius: width / 2
+					color: root.hoveredStatus === 1 ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+				}
+
+				Kirigami.Heading {
+					Layout.fillWidth: true
+					level: 3
+					elide: Text.ElideRight
+					text: root.hoveredServer ? (root.hoveredServer.name.length == 0 ? root.hoveredServer.hostname : root.hoveredServer.name) : ""
+				}
+
+				Rectangle {
+					Layout.alignment: Qt.AlignVCenter
+					visible: root.hoveredDetailText.length > 0
+					implicitWidth: badgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.6
+					implicitHeight: badgeLabel.implicitHeight + Kirigami.Units.smallSpacing * 0.9
+					radius: Kirigami.Units.cornerRadius
+					color: {
+						var c = levelColor(root.hoveredDetailLevel);
+						return Qt.rgba(c.r, c.g, c.b, 0.18);
+					}
+
+					QQC2.Label {
+						id: badgeLabel
+						anchors.centerIn: parent
+						text: root.hoveredDetailText
+						color: levelColor(root.hoveredDetailLevel)
+						font.pointSize: Kirigami.Theme.smallFont.pointSize
+						font.bold: true
+					}
+				}
 			}
 
-			QQC2.Label {
+			RowLayout {
 				Layout.fillWidth: true
-				visible: root.hoveredLatencyAvailable
-				font.pointSize: Kirigami.Theme.smallFont.pointSize
-				wrapMode: Text.NoWrap
-				elide: Text.ElideRight
-				text: root.hoveredLatencyStats
+				spacing: Kirigami.Units.smallSpacing
+
+				Kirigami.Icon {
+					Layout.alignment: Qt.AlignVCenter
+					Layout.preferredWidth: Kirigami.Units.iconSizes.small
+					Layout.preferredHeight: Kirigami.Units.iconSizes.small
+					source: root.methodIcon(root.hoveredMethod)
+					color: Kirigami.Theme.disabledTextColor
+				}
+
+				QQC2.Label {
+					Layout.fillWidth: true
+					elide: Text.ElideRight
+					text: root.hoveredHostname
+					font.family: "monospace"
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
+
+				QQC2.Label {
+					text: methodLabel(root.hoveredMethod)
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
+			}
+
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: Kirigami.Units.smallSpacing
+
+				QQC2.Label {
+					Layout.fillWidth: true
+					elide: Text.ElideRight
+					text: i18n("Última comprobación: %1", root.hoveredServer ? formatAge(root.hoveredServer.lastRefreshAt) : i18n("never"))
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
+
+				QQC2.Label {
+					text: root.hoveredWindowLabel
+					visible: hasLatencyMethod(root.hoveredMethod) && root.hoveredLatencySummary.samples > 0
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
+			}
+
+			Rectangle {
+				Layout.fillWidth: true
+				Layout.preferredHeight: 1
+				color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
+			}
+
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: Kirigami.Units.largeSpacing
+				visible: root.hoveredLatencySummary.samples > 0
+
+				QQC2.Label {
+					visible: root.hoveredLatencyAvailable
+					text: i18n("mín %1 ms", root.hoveredLatencySummary.min.toFixed(0))
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
+
+				QQC2.Label {
+					visible: root.hoveredLatencyAvailable
+					text: i18n("med %1 ms", root.hoveredLatencySummary.avg.toFixed(0))
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
+
+				QQC2.Label {
+					visible: root.hoveredLatencyAvailable
+					text: i18n("máx %1 ms", root.hoveredLatencySummary.max.toFixed(0))
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
+
+				Item {
+					Layout.fillWidth: true
+				}
+
+				QQC2.Label {
+					text: i18n("pérdida %1 %", root.hoveredLatencySummary.loss)
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: root.hoveredLatencySummary.loss > 0 ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.disabledTextColor
+				}
 			}
 
 			LatencySparkline {
-				Layout.preferredWidth: 260
-				Layout.preferredHeight: 40
+				Layout.fillWidth: true
+				Layout.preferredHeight: 52
 				visible: root.hoveredLatencyAvailable
 				samples: root.hoveredHostname.length > 0 ? (root.latencyHistory[root.hoveredHostname] || []) : []
 				windowSeconds: Math.max(60, Number(Plasmoid.configuration.latencyHistoryMinutes) * 60)
@@ -79,10 +200,30 @@ PlasmoidItem {
 
 			QQC2.Label {
 				Layout.fillWidth: true
-				visible: hasLatencyMethod(root.hoveredMethod) && !root.hoveredLatencyAvailable
+				visible: hasLatencyMethod(root.hoveredMethod) && root.hoveredLatencySummary.samples === 0
 				font.pointSize: Kirigami.Theme.smallFont.pointSize
 				color: Kirigami.Theme.disabledTextColor
-				text: i18n("Collecting latency data…")
+				text: i18n("Recopilando datos de latencia…")
+			}
+
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: Kirigami.Units.smallSpacing
+				visible: root.hoveredHostname.length > 0 && hasDiagnostic(root.hoveredHostname)
+
+				Kirigami.Icon {
+					Layout.alignment: Qt.AlignVCenter
+					Layout.preferredWidth: Kirigami.Theme.smallFont.pointSize * 1.4
+					Layout.preferredHeight: Kirigami.Theme.smallFont.pointSize * 1.4
+					source: "document-open"
+					color: Kirigami.Theme.disabledTextColor
+				}
+
+				QQC2.Label {
+					text: i18n("Diagnóstico disponible")
+					font.pointSize: Kirigami.Theme.smallFont.pointSize
+					color: Kirigami.Theme.disabledTextColor
+				}
 			}
 		}
 	}
@@ -455,7 +596,9 @@ PlasmoidItem {
 		serversModel.setProperty(index, "detail", detailInfo.text);
 		serversModel.setProperty(index, "detailLevel", detailInfo.level);
 
-		recordLatency(server.hostname, detailInfo.latency, status === 1);
+		if(hasLatencyMethod(method)) {
+			recordLatency(server.hostname, detailInfo.latency, status === 1);
+		}
 
 		updateStatusSummary();
 
@@ -522,10 +665,6 @@ PlasmoidItem {
 	}
 
 	function recordLatency(host, latencyMs, ok) {
-		if(latencyMs < 0) {
-			return;
-		}
-
 		var key = String(host || "");
 
 		if(key.length === 0) {
@@ -537,7 +676,7 @@ PlasmoidItem {
 		var cutoff = now - minutes * 60;
 
 		var arr = latencyHistory[key] ? latencyHistory[key].slice() : [];
-		arr.push({ t: now, v: latencyMs, ok: ok === true });
+		arr.push({ t: now, v: (latencyMs >= 0 ? latencyMs : -1), ok: ok === true });
 
 		var filtered = [];
 
@@ -571,7 +710,7 @@ PlasmoidItem {
 		var count = 0;
 
 		for(var i = 0; i < arr.length; i++) {
-			if(arr[i].ok) {
+			if(arr[i].ok && arr[i].v >= 0) {
 				count++;
 			}
 		}
@@ -579,17 +718,30 @@ PlasmoidItem {
 		return count >= 2;
 	}
 
-	function latencyStats(host) {
+	function latencySummary(host) {
 		var arr = latencyHistory[String(host || "")] || [];
 		var min = -1;
 		var max = -1;
 		var sum = 0;
 		var count = 0;
+		var fails = 0;
+		var total = 0;
 
 		for(var i = 0; i < arr.length; i++) {
 			var s = arr[i];
 
-			if(!s.ok || s.v < 0) {
+			if(!s) {
+				continue;
+			}
+
+			total++;
+
+			if(!s.ok) {
+				fails++;
+				continue;
+			}
+
+			if(s.v < 0) {
 				continue;
 			}
 
@@ -605,11 +757,23 @@ PlasmoidItem {
 			count++;
 		}
 
-		if(count === 0) {
-			return "";
-		}
+		return {
+			min: min,
+			avg: count > 0 ? sum / count : -1,
+			max: max,
+			count: count,
+			samples: total,
+			loss: total > 0 ? Math.round(100 * fails / total) : 0,
+			hasData: count >= 2
+		};
+	}
 
-		return i18n("min %1 ms · avg %2 ms · max %3 ms", min.toFixed(0), (sum / count).toFixed(0), max.toFixed(0));
+	function methodIcon(method) {
+		switch(Number(method)) {
+			case 2: return "internet-services";
+			case 3: return "utilities-terminal";
+			default: return "network-wired";
+		}
 	}
 
 	function levelColor(level) {
@@ -646,31 +810,6 @@ PlasmoidItem {
 		}
 
 		return i18n("%1 hours ago", Math.floor(seconds / 3600));
-	}
-
-	function tooltipTextFor(index) {
-		if(index < 0 || index >= serversModel.count) {
-			return "";
-		}
-
-		var server = serversModel.get(index);
-		var lines = [];
-
-		lines.push(server.name.length == 0 ? server.hostname : server.name);
-		lines.push(i18n("Host: %1", server.hostname));
-		lines.push(i18n("Method: %1", methodLabel(server.method)));
-		lines.push(i18n("Last check: %1", formatAge(server.lastRefreshAt)));
-
-		if(server.detail && server.detail.length > 0) {
-			lines.push(i18n("Result: %1", server.detail));
-		}
-
-		if(hasDiagnostic(server.hostname)) {
-			lines.push(i18n("Diagnostic available"));
-		}
-
-		lines.push(i18n("Left click: refresh · Right click: options"));
-		return lines.join("\n");
 	}
 
 	function updateStatusSummary() {
