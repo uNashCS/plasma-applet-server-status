@@ -215,7 +215,7 @@ KCM.SimpleKCM {
 				text: i18n("Diagnostic route...")
 				icon.name: "network-connect"
 				enabled: serverHostname.text.trim().length > 0
-				onClicked: diagnosticDialog.showFor(serverName.text, serverHostname.text)
+				onClicked: diagnosticDialog.showFor(serverName.text, serverHostname.text, Plasmoid.configuration.diagnosticCycles)
 			}
 
 			QQC2.SpinBox {

@@ -49,6 +49,10 @@
       <label>Run a network diagnostic when a server goes offline</label>
       <default>true</default>
     </entry>
+    <entry name="diagnosticCycles" type="Int">
+      <label>Number of ping cycles for network diagnostics</label>
+      <default>3</default>
+    </entry>
     <entry name="notificationUp" type="String">
       <label>Legacy notification on server online</label>
       <default>{}</default>

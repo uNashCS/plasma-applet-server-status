@@ -15,6 +15,7 @@ QQC2.ApplicationWindow {
 	property string tool: ""
 	property int exitCode: -1
 	property bool cancelled: false
+	property int cycles: 3
 
 	readonly property int maxWidth: Screen.width > 0 ? Math.round(Screen.width * 0.85) : Kirigami.Units.gridUnit * 70
 	readonly property int maxHeight: Screen.height > 0 ? Math.round(Screen.height * 0.8) : Kirigami.Units.gridUnit * 40
@@ -121,6 +122,20 @@ QQC2.ApplicationWindow {
 		RowLayout {
 			Layout.fillWidth: true
 
+			QQC2.Label {
+				text: i18n("Cycles:")
+			}
+
+			QQC2.SpinBox {
+				id: cyclesSpinBox
+
+				from: 1
+				to: 30
+				value: diagnosticDialog.cycles
+				enabled: !runner.running
+				onValueChanged: diagnosticDialog.cycles = value
+			}
+
 			Item {
 				Layout.fillWidth: true
 			}
@@ -166,9 +181,10 @@ QQC2.ApplicationWindow {
 		}
 	}
 
-	function showFor(name, host) {
+	function showFor(name, host, cyclesValue) {
 		serverName = String(name || "").trim();
 		hostname = String(host || "").trim();
+		cycles = Math.min(30, Math.max(1, Number(cyclesValue) || 3));
 		output = "";
 		error = "";
 		note = "";
@@ -210,6 +226,6 @@ QQC2.ApplicationWindow {
 		exitCode = -1;
 		cancelled = false;
 
-		runner.start(hostname, serverName, hostname);
+		runner.start(hostname, serverName, hostname, cycles);
 	}
 }

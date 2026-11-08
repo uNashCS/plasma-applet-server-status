@@ -14,6 +14,7 @@ KCM.SimpleKCM {
 	property alias cfg_notificationDownAction: notifyDownAction.currentIndex
 	property alias cfg_notificationDownCommand: notifyDownCommand.text
 	property alias cfg_diagnosticAutoOffline: diagnosticAutoOffline.checked
+	property alias cfg_diagnosticCycles: diagnosticCycles.value
 
 	Plasma5Support.DataSource {
 		id: settingsDS
@@ -116,6 +117,13 @@ KCM.SimpleKCM {
 			id: diagnosticAutoOffline
 			text: i18n("Run a network diagnostic when a server goes offline")
 			Layout.fillWidth: true
+		}
+
+		QQC2.SpinBox {
+			id: diagnosticCycles
+			Kirigami.FormData.label: i18n("Ping cycles:")
+			from: 1
+			to: 30
 		}
 
 		QQC2.Label {

@@ -512,7 +512,7 @@ PlasmoidItem {
 			return;
 		}
 
-		diagnosticDialog.showFor(server.name, server.hostname);
+		diagnosticDialog.showFor(server.name, server.hostname, Plasmoid.configuration.diagnosticCycles);
 	}
 
 	function hasDiagnostic(hostname) {
@@ -556,7 +556,7 @@ PlasmoidItem {
 		}
 
 		try {
-			runner.start(server.hostname, server.name, key);
+			runner.start(server.hostname, server.name, key, Plasmoid.configuration.diagnosticCycles);
 		} catch(e) {
 			console.log("Automatic diagnostic failed:", e);
 			failDiagnostic(key, String(e), runner);

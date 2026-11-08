@@ -15,6 +15,7 @@ Plasma5Support.DataSource {
 	property string note: ""
 	property int exitCode: -1
 	property string activeSource: ""
+	property int reportCycles: 3
 
 	signal finished()
 	signal failed(string message)
@@ -28,12 +29,13 @@ Plasma5Support.DataSource {
 
 	Component.onDestruction: cancel()
 
-	function start(host, name, key) {
+	function start(host, name, key, cycles) {
 		cancel();
 
 		hostname = "";
 		serverName = String(name || "").trim();
 		reportKey = key !== undefined && key !== null ? String(key) : String(host || "").trim();
+		reportCycles = Math.min(30, Math.max(1, Number(cycles) || 3));
 		running = false;
 		usingFallback = false;
 		tool = "";
@@ -105,7 +107,7 @@ Plasma5Support.DataSource {
 	}
 
 	function runMtr() {
-		activeSource = "timeout 30s mtr -rwc 3 -b " + shellQuote(hostname);
+		activeSource = "timeout " + Math.max(30, reportCycles * 15) + "s mtr -rwc " + reportCycles + " -b " + shellQuote(hostname);
 		connectSource(activeSource);
 	}
 
