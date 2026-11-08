@@ -10,6 +10,7 @@ KCM.SimpleKCM {
 	id: configAppearance
 
 	property alias cfg_fontSize: fontSize.value
+	property alias cfg_latencyHistoryMinutes: latencyHistoryMinutes.value
 	property string cfg_iconOnline: Plasmoid.configuration.iconOnline
 	property string cfg_iconOffline: Plasmoid.configuration.iconOffline
 
@@ -25,6 +26,19 @@ KCM.SimpleKCM {
 			}
 			from: 1
 			to: 128
+		}
+
+		QQC2.SpinBox {
+			id: latencyHistoryMinutes
+			Kirigami.FormData.label: i18n("Latency history:")
+			textFromValue: function(value) {
+				return value + i18n(" minutes")
+			}
+			valueFromText: function(text) {
+				return parseInt(text)
+			}
+			from: 1
+			to: 360
 		}
 
 		IconPicker {

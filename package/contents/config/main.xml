@@ -23,6 +23,10 @@
       <label>Offline icon</label>
       <default>security-low</default>
     </entry>
+    <entry name="latencyHistoryMinutes" type="Int">
+      <label>Minutes of latency history to keep</label>
+      <default>60</default>
+    </entry>
   </group>
   <group name="Notifications">
     <entry name="notificationUpAction" type="Int">

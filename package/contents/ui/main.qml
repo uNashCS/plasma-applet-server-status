@@ -19,6 +19,7 @@ PlasmoidItem {
 	property int statusSummary: 1
 	property var diagnosticReports: ({})
 	property var diagnosticRunning: ({})
+	property var latencyHistory: ({})
 
 	Layout.fillWidth: true
 	Layout.fillHeight: true
@@ -133,9 +134,7 @@ PlasmoidItem {
 				width: ListView.view.width
 				height: nameText.implicitHeight * 1.6
 
-				QQC2.ToolTip.visible: mouseArea.containsMouse
-				QQC2.ToolTip.delay: 500
-				QQC2.ToolTip.text: {
+				property string tooltipText: {
 					var lines = [];
 					lines.push(model.name.length == 0 ? model.hostname : model.name);
 					lines.push(i18n("Host: %1", model.hostname));
@@ -152,6 +151,60 @@ PlasmoidItem {
 
 					lines.push(i18n("Left click: refresh · Right click: options"));
 					return lines.join("\n");
+				}
+
+				QQC2.ToolTip {
+					id: rowToolTip
+
+					visible: mouseArea.containsMouse
+					delay: 400
+					closePolicy: QQC2.Popup.CloseOnEscape
+					x: Math.round((parent.width - width) / 2)
+					y: {
+						var rowY = serverRow.mapToItem(serversListView, 0, 0).y;
+
+						if(rowY < serversListView.height / 2) {
+							return parent.height + Kirigami.Units.smallSpacing;
+						}
+
+						return -height - Kirigami.Units.smallSpacing;
+					}
+
+					contentItem: ColumnLayout {
+						spacing: Kirigami.Units.smallSpacing
+						width: 240
+
+						QQC2.Label {
+							Layout.fillWidth: true
+							wrapMode: Text.WordWrap
+							text: serverRow.tooltipText
+						}
+
+						QQC2.Label {
+							Layout.fillWidth: true
+							visible: hasLatencyData(model.hostname)
+							font.pointSize: Kirigami.Theme.smallFont.pointSize
+							wrapMode: Text.NoWrap
+							elide: Text.ElideRight
+							text: latencyStats(model.hostname)
+						}
+
+						LatencySparkline {
+							Layout.preferredWidth: 240
+							Layout.preferredHeight: 40
+							visible: hasLatencyData(model.hostname)
+							samples: root.latencyHistory[model.hostname] || []
+							windowSeconds: Math.max(60, Number(Plasmoid.configuration.latencyHistoryMinutes) * 60)
+						}
+
+						QQC2.Label {
+							Layout.fillWidth: true
+							visible: hasLatencyMethod(model.method) && !hasLatencyData(model.hostname)
+							font.pointSize: Kirigami.Theme.smallFont.pointSize
+							color: Kirigami.Theme.disabledTextColor
+							text: i18n("Collecting latency data…")
+						}
+					}
 				}
 
 				RowLayout {
@@ -352,7 +405,7 @@ PlasmoidItem {
 				break;
 
 			case 2: // HTTP 200 OK
-				command = 'curl -sL --connect-timeout 4 --max-time 8 -w "%{http_code}" "' + serversModel.get(index).hostname + '" -o /dev/null';
+				command = 'curl -sL --connect-timeout 4 --max-time 8 -w "%{http_code} %{time_total}" "' + serversModel.get(index).hostname + '" -o /dev/null';
 				break;
 
 			case 3: // COMMAND
@@ -378,7 +431,8 @@ PlasmoidItem {
 				break;
 
 			case 2: // HTTP 200 OK
-				status = stdout.indexOf("200") !== -1 ? 1 : 0;
+				var httpParts = String(stdout || "").trim().split(/\s+/);
+				status = parseInt(httpParts[0], 10) === 200 ? 1 : 0;
 				break;
 
 			case 3: // COMMAND
@@ -405,6 +459,8 @@ PlasmoidItem {
 		serversModel.setProperty(index, "detail", detailInfo.text);
 		serversModel.setProperty(index, "detailLevel", detailInfo.level);
 
+		recordLatency(server.hostname, detailInfo.latency, status === 1);
+
 		updateStatusSummary();
 
 		if(statusChanged) {
@@ -427,10 +483,16 @@ PlasmoidItem {
 	function computeDetail(method, status, stdout) {
 		var text = "";
 		var level = 0;
+		var latency = -1;
 
 		if(method === 2) {
-			var codeMatch = String(stdout || "").trim().match(/(\d{3})/);
-			var code = codeMatch ? parseInt(codeMatch[1], 10) : -1;
+			var parts = String(stdout || "").trim().split(/\s+/);
+			var code = parseInt(parts[0], 10);
+			var timeSeconds = parseFloat(parts[1]);
+
+			if(isNaN(code)) {
+				code = -1;
+			}
 
 			if(code >= 0) {
 				text = String(code);
@@ -439,6 +501,10 @@ PlasmoidItem {
 				text = i18n("Fail");
 				level = 3;
 			}
+
+			if(!isNaN(timeSeconds) && timeSeconds > 0) {
+				latency = timeSeconds * 1000;
+			}
 		} else if(method === 0 || method === 1) {
 			var match = String(stdout || "").match(/=\s*([\d.,]+)\/([\d.,]+)\/([\d.,]+)\/([\d.,]+)\s*ms/);
 
@@ -446,6 +512,7 @@ PlasmoidItem {
 				var avg = parseFloat(match[2].replace(",", "."));
 				text = avg.toFixed(1) + " ms";
 				level = avg < 150 ? 1 : (avg < 400 ? 2 : 3);
+				latency = avg;
 			} else {
 				text = status === 1 ? "OK" : i18n("Fail");
 				level = status === 1 ? 1 : 3;
@@ -455,7 +522,98 @@ PlasmoidItem {
 			level = status === 1 ? 1 : 3;
 		}
 
-		return { text: text, level: level };
+		return { text: text, level: level, latency: latency };
+	}
+
+	function recordLatency(host, latencyMs, ok) {
+		if(latencyMs < 0) {
+			return;
+		}
+
+		var key = String(host || "");
+
+		if(key.length === 0) {
+			return;
+		}
+
+		var now = Math.floor(Date.now() / 1000);
+		var minutes = Number(Plasmoid.configuration.latencyHistoryMinutes) || 60;
+		var cutoff = now - minutes * 60;
+
+		var arr = latencyHistory[key] ? latencyHistory[key].slice() : [];
+		arr.push({ t: now, v: latencyMs, ok: ok === true });
+
+		var filtered = [];
+
+		for(var i = 0; i < arr.length; i++) {
+			if(arr[i].t >= cutoff) {
+				filtered.push(arr[i]);
+			}
+		}
+
+		if(filtered.length > 720) {
+			filtered = filtered.slice(filtered.length - 720);
+		}
+
+		var next = {};
+
+		for(var existingKey in latencyHistory) {
+			next[existingKey] = latencyHistory[existingKey];
+		}
+
+		next[key] = filtered;
+		latencyHistory = next;
+	}
+
+	function hasLatencyMethod(method) {
+		var m = Number(method);
+		return m === 0 || m === 1 || m === 2;
+	}
+
+	function hasLatencyData(host) {
+		var arr = latencyHistory[String(host || "")] || [];
+		var count = 0;
+
+		for(var i = 0; i < arr.length; i++) {
+			if(arr[i].ok) {
+				count++;
+			}
+		}
+
+		return count >= 2;
+	}
+
+	function latencyStats(host) {
+		var arr = latencyHistory[String(host || "")] || [];
+		var min = -1;
+		var max = -1;
+		var sum = 0;
+		var count = 0;
+
+		for(var i = 0; i < arr.length; i++) {
+			var s = arr[i];
+
+			if(!s.ok || s.v < 0) {
+				continue;
+			}
+
+			if(min < 0 || s.v < min) {
+				min = s.v;
+			}
+
+			if(s.v > max) {
+				max = s.v;
+			}
+
+			sum += s.v;
+			count++;
+		}
+
+		if(count === 0) {
+			return "";
+		}
+
+		return i18n("min %1 ms · avg %2 ms · max %3 ms", min.toFixed(0), (sum / count).toFixed(0), max.toFixed(0));
 	}
 
 	function levelColor(level) {
