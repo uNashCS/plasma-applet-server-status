@@ -2,3 +2,5 @@ build
 .kdev4
 *.jsc
 *.qmlc
+.opencode
+.promptignore
