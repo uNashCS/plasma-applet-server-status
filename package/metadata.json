@@ -3,6 +3,10 @@
     "KPlugin": {
         "Authors": [
             {
+                "Email": "cristosalas95@gmail.com",
+                "Name": "Cristopher Salas (uNashCS)"
+            },
+            {
                 "Email": "me@ryey.icu",
                 "Name": "renyuneyun (Rui Zhao)"
             },
@@ -20,12 +24,12 @@
         "EnabledByDefault": true,
         "Icon": "applications-internet",
         "Id": "org.kde.plasma.serverstatus",
-        "License": "MIT",
+        "License": "GPL-3.0-or-later",
         "Name": "Server Status",
         "Name[en_GB]": "Server Status",
         "Name[pl]": "Status Serwerów",
-        "Version": "2.3",
-        "Website": "http://maciej.gierej.pl"
+        "Version": "2.4",
+        "Website": "https://github.com/uNashCS/plasma-applet-server-status"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }
